@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CipherSQLStudio</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 15px;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        button {
+            padding: 8px 12px;
+            margin: 5px;
+            cursor: pointer;
+        }
+
+        textarea {
+            width: 100%;
+            height: 120px;
+            font-family: monospace;
+        }
+
+        pre {
+            background: #fff;
+            padding: 10px;
+            border: 1px solid #ddd;
+            overflow-x: auto;
+        }
+
+        .box {
+            background: white;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+        }
+
+        #workspace {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>CipherSQLStudio</h1>
+
+<div class="box">
+    <h2>Assignments</h2>
+    <div id="assignmentList"></div>
+</div>
+
+<div id="workspace" class="box">
+    <h2 id="title"></h2>
+    <p id="question"></p>
+
+    <h3>Schema</h3>
+    <pre id="schema"></pre>
+
+    <h3>SQL Editor</h3>
+    <textarea id="sqlInput" placeholder="SELECT * FROM employees;"></textarea>
+
+    <br><br>
+    <button onclick="executeQuery()">Execute Query</button>
+    <button onclick="getHint()">Get Hint</button>
+
+    <h3>Result</h3>
+    <pre id="result"></pre>
+
+    <h3>Hint</h3>
+    <pre id="hint"></pre>
+</div>
+
+<script>
+    const API = "/api";
+    let assignmentId = null;
+    window.onload = loadAssignments;
+
+    function loadAssignments() {
+        fetch(API + "/assignments")
+            .then(res => res.json())
+            .then(data => {
+                const list = document.getElementById("assignmentList");
+                list.innerHTML = "";
+
+                data.forEach(a => {
+                    const btn = document.createElement("button");
+                    btn.innerText = a.title + " (" + a.difficulty + ")";
+                    btn.onclick = () => selectAssignment(a);
+                    list.appendChild(btn);
+                });
+            })
+            .catch(() => alert("Backend not reachable"));
+    }
+
+    function selectAssignment(a) {
+        assignmentId = a.id;
+
+        document.getElementById("workspace").style.display = "block";
+        document.getElementById("title").innerText = a.title;
+        document.getElementById("question").innerText = a.question;
+
+        fetch(API + "/assignments/" + assignmentId + "/schema")
+            .then(res => res.json())
+            .then(schema => {
+                document.getElementById("schema").innerText =
+                    JSON.stringify(schema, null, 2);
+            });
+    }
+
+    function executeQuery() {
+        if (!assignmentId) {
+            alert("Select an assignment first");
+            return;
+        }
+
+        fetch(API + "/query/execute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                assignmentId: assignmentId,
+                sql: document.getElementById("sqlInput").value
+            })
+        })
+        .then(res => res.json())
+        .then(result => {
+            document.getElementById("result").innerText =
+                JSON.stringify(result, null, 2);
+
+            saveProgress();
+        })
+        .catch(() => {
+            document.getElementById("result").innerText =
+                "Error executing query";
+        });
+    }
+
+    function getHint() {
+        fetch(API + "/hints", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                assignmentId: assignmentId,
+                question: document.getElementById("question").innerText,
+                userSql: document.getElementById("sqlInput").value
+            })
+        })
+        .then(res => res.json())
+        .then(h => {
+            document.getElementById("hint").innerText = h.hint;
+        })
+        .catch(() => {
+            document.getElementById("hint").innerText =
+                "Hint service unavailable";
+        });
+    }
+
+    function saveProgress() {
+        fetch(API + "/progress", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                userId: "demo_user",
+                assignmentId: assignmentId,
+                sql: document.getElementById("sqlInput").value,
+                completed: false
+            })
+        });
+    }
+</script>
+
+</body>
+</html>
